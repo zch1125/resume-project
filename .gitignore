@@ -1,0 +1,62 @@
+### Java / Maven ###
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+*.jar
+*.war
+*.nar
+*.zip
+*.tar.gz
+*.rar
+
+### IntelliJ IDEA ###
+.idea/
+*.iml
+*.iws
+*.ipr
+
+### VS Code ###
+.vscode/
+
+### Eclipse ###
+.classpath
+.project
+.settings/
+bin/
+
+### macOS ###
+.DS_Store
+.AppleDouble
+.LSOverride
+
+### Windows ###
+Thumbs.db
+Desktop.ini
+
+### Node / Frontend ###
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+### Spring Boot Application Secrets ###
+server/backend/src/main/resources/application*.yml
+
+### Maven local repo (download cache) ###
+.m2-repo/
+
+### Agent metadata ###
+.agents/
+
+### Logs ###
+logs/
+*.log
+boot.log
+
+### Build generated ###
+*.class
+.flattened-pom.xml
