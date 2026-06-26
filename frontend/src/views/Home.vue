@@ -148,6 +148,17 @@
                   placeholder="请粘贴岗位招聘信息（JD），包括岗位职责、任职要求、技术栈等..."
                   class="jd-input"
                 />
+                <div class="jd-upload-area">
+                  <div v-if="!imagePreview" class="jd-upload-trigger" @click="$refs.fileInput.click()">
+                    <span class="jd-upload-icon">🖼️</span>
+                    <span class="jd-upload-text">上传岗位截图（可选）</span>
+                    <input ref="fileInput" type="file" accept="image/*" @change="handleImageUpload" hidden />
+                  </div>
+                  <div v-else class="jd-image-preview">
+                    <img :src="imagePreview" alt="岗位截图" />
+                    <el-button @click="removeImage" type="danger" circle size="small" class="jd-remove-btn">✕</el-button>
+                  </div>
+                </div>
                 <el-button
                   type="primary"
                   size="large"
@@ -286,6 +297,8 @@ const adviceForm = reactive({
 const jobDescription = ref("");
 const startingInterview = ref(false);
 const sessionId = ref(null);
+const imageFile = ref(null);
+const imagePreview = ref(null);
 const messages = ref([]);
 const currentAnswer = ref("");
 const chatLoading = ref(false);
@@ -354,8 +367,17 @@ async function handleStartInterview() {
   if (!jobDescription.value.trim()) { ElMessage.warning("请粘贴岗位招聘信息"); return; }
   startingInterview.value = true;
   try {
-    const res = await startInterview(resumeId.value, jobDescription.value.trim());
+    let imageData = null;
+    let imageType = null;
+    if (imageFile.value) {
+      imageType = imageFile.value.type;
+      const b64 = await toBase64(imageFile.value);
+      imageData = b64.split(",")[1];
+    }
+    const res = await startInterview(resumeId.value, jobDescription.value.trim(), imageData, imageType);
     sessionId.value = res.sessionId;
+    imageFile.value = null;
+    imagePreview.value = null;
     messages.value = [];
     messages.value.push({
       id: Date.now(),
@@ -423,6 +445,30 @@ async function handleAdviceChat() {
   finally { adviceChatLoading.value = false; }
 }
 
+
+function toBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function handleImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  imageFile.value = file;
+  const reader = new FileReader();
+  reader.onload = (e) => { imagePreview.value = e.target.result; };
+  reader.readAsDataURL(file);
+}
+
+function removeImage() {
+  imageFile.value = null;
+  imagePreview.value = null;
+}
+
 function handleResetInterview() {
   sessionId.value = null;
   messages.value = [];
@@ -466,6 +512,16 @@ function handleResetInterview() {
 .interview-card { display: flex; flex-direction: column; }
 .job-desc-form { display: flex; flex-direction: column; gap: 16px; }
 .start-btn { align-self: flex-start; }
+
+/* Image upload */
+.jd-upload-area { margin: 8px 0; }
+.jd-upload-trigger { display: flex; align-items: center; gap: 8px; padding: 16px; border: 2px dashed #dcdfe6; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: #fafafa; }
+.jd-upload-trigger:hover { border-color: #409eff; background: #ecf5ff; }
+.jd-upload-icon { font-size: 24px; }
+.jd-upload-text { font-size: 14px; color: #909399; }
+.jd-image-preview { position: relative; display: inline-block; }
+.jd-image-preview img { max-height: 160px; border-radius: 8px; border: 1px solid #ebeef5; }
+.jd-remove-btn { position: absolute; top: -8px; right: -8px; }
 .interview-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 
 .chat-container {

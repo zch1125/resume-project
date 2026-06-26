@@ -17,22 +17,27 @@
 
 ```
 resume-project/
-├── pom.xml                    # Maven 父 POM
-├── gateway/                   # API 网关 (端口 8080)
-│   ├── pom.xml
-│   └── src/main/
-├── backend/                   # 后端服务 (端口 8081)
-│   ├── pom.xml
-│   └── src/main/java/com/resume/
-│       ├── ResumeApplication.java
-│       ├── common/            # 统一返回结果、全局异常处理
-│       ├── config/            # MyBatis-Plus、CORS、AI 配置
-│       ├── entity/            # 数据库实体
-│       ├── dto/               # 请求/响应 DTO
-│       ├── mapper/            # MyBatis-Plus Mapper
-│       ├── service/           # 业务逻辑
-│       └── controller/        # RESTful 接口
+├── server/                    # 后端根模块
+│   ├── pom.xml                # Maven 父 POM
+│   ├── sql/
+│   │   └── init.sql           # 数据库初始化脚本
+│   ├── gateway/               # API 网关 (端口 8080)
+│   │   ├── pom.xml
+│   │   └── src/main/java/com/resume/gateway/
+│   └── backend/               # 后端服务 (端口 8081)
+│       ├── pom.xml
+│       └── src/main/java/com/resume/
+│           ├── ResumeApplication.java
+│           ├── common/        # 统一返回结果、全局异常处理
+│           ├── config/        # MyBatis-Plus、CORS、AI 配置
+│           ├── entity/        # 数据库实体
+│           ├── dto/           # 请求/响应 DTO
+│           ├── mapper/        # MyBatis-Plus Mapper
+│           ├── service/       # 业务逻辑
+│           └── controller/    # RESTful 接口
 ├── frontend/                  # Vue 3 前端 (端口 3000)
+│   ├── public/
+│   │   └── favicon.svg        # 站点图标
 │   ├── package.json
 │   ├── vite.config.js
 │   └── src/
@@ -40,8 +45,8 @@ resume-project/
 │       ├── views/             # 页面组件
 │       ├── components/        # 通用组件
 │       └── router/            # 路由配置
-└── sql/
-    └── init.sql               # 数据库初始化脚本
+├── .gitignore
+└── README.md
 ```
 
 ## 快速开始
@@ -57,12 +62,12 @@ resume-project/
 
 ```sql
 -- 执行 SQL 脚本创建数据库和表
-mysql -u root -p < sql/init.sql
+mysql -u root -p < server/sql/init.sql
 ```
 
 ### 3. 配置环境变量
 
-**后端**（`backend/src/main/resources/application.yml`）：
+**后端**（`server/backend/src/main/resources/application.yml`）：
 
 ```yaml
 spring:
@@ -81,6 +86,8 @@ spring:
 ### 4. 启动后端
 
 ```bash
+# 进入后端模块
+cd server
 # 构建项目
 mvn clean package -DskipTests
 
@@ -89,6 +96,9 @@ java -jar gateway/target/gateway-1.0.0.jar
 
 # 启动后端服务（另一个终端）
 java -jar backend/target/backend-1.0.0.jar
+
+# 返回项目根目录
+cd ..
 ```
 
 ### 5. 启动前端
@@ -109,16 +119,18 @@ npm run dev
 | POST | `/api/resume/parse/{id}` | AI 解析简历 |
 | POST | `/api/resume/advice` | 获取修改建议 |
 | GET  | `/api/resume/{id}` | 获取简历信息 |
-| POST | `/api/interview/generate` | 生成面试题 |
-| POST | `/api/interview/answer` | 提交答案并评分 |
+| POST | `/api/interview/start` | 开始模拟面试（支持上传岗位截图） |
+| POST | `/api/interview/chat` | 继续面试（提交答案） |
 
 ## 功能说明
 
 1. **简历上传**：支持 PDF/Word/TXT 文件，自动提取文本内容
 2. **智能解析**：AI 提取姓名、学历、技能、项目等结构化信息
-3. **修改建议**：根据目标岗位生成具体修改建议，无需修改时自动提示
-4. **模拟面试**：自动生成 20 道技术/项目/行为面试题，逐题作答后 AI 评分
-5. **评分系统**：每题 0-5 分，总分 60 及格，90 优秀
+3. **修改建议**：根据目标岗位生成具体修改建议，无需修改时自动提示，支持追问对话
+4. **模拟面试**：粘贴岗位 JD 后 AI 自动生成面试题，支持上传岗位截图辅助分析
+5. **逐题作答评分**：每次回答后 AI 根据简历和岗位要求评分并追问
+6. **面试报告**：结束时生成综合评价、能力评分和理想回答参考
+7. **评分系统**：每题 0-5 分，总分 60 及格，90 优秀
 
 ## 注意事项
 

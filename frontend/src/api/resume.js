@@ -12,11 +12,11 @@ export function parseResume(resumeId) {
 }
 
 export function getResumeAdvice(resumeId, jobTitle) {
+  return request.post('/api/resume/advice', { resumeId, jobTitle })
+}
 
 export function chatAdvice(suggestionId, userMessage) {
   return request.post('/api/resume/advice/chat', { suggestionId, userMessage })
-}
-  return request.post('/api/resume/advice', { resumeId, jobTitle })
 }
 
 export function getResumeById(resumeId) {

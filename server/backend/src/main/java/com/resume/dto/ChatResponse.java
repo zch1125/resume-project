@@ -30,4 +30,18 @@ public class ChatResponse {
     private List<String> strengths;
 
     private List<String> weaknesses;
+
+    private List<ModelAnswer> modelAnswers;
+
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ModelAnswer {
+        private String question;
+        private String type;
+        private Boolean isFollowUp;
+        private String modelAnswer;
+}
 }

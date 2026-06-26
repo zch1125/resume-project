@@ -12,4 +12,8 @@ public class StartInterviewRequest {
 
     @NotBlank(message = "岗位招聘信息不能为空")
     private String jobDescription;
+
+    private String imageData;
+
+    private String imageType;
 }

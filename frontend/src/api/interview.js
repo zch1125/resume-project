@@ -1,7 +1,7 @@
 import request from './index'
 
-export function startInterview(resumeId, jobDescription) {
-  return request.post('/api/interview/start', { resumeId, jobDescription })
+export function startInterview(resumeId, jobDescription, imageData, imageType) {
+  return request.post('/api/interview/start', { resumeId, jobDescription, imageData, imageType })
 }
 
 export function chatInterview(sessionId, userAnswer) {

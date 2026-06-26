@@ -32,7 +32,7 @@ public class InterviewServiceImpl implements InterviewService {
 
     @Override
     @Transactional
-    public ChatResponse startInterview(Long resumeId, String jobDescription) {
+    public ChatResponse startInterview(Long resumeId, String jobDescription, String imageData, String imageType) {
         Resume resume = resumeService.getById(resumeId);
 
         InterviewSession session = new InterviewSession();
@@ -56,6 +56,7 @@ public class InterviewServiceImpl implements InterviewService {
                     %s
 
                     规则：
+                    0. 如果用户还上传了岗位招聘信息的图片，请结合图片和文字内容一起分析
                     1. 请先进行简单的问候开场，然后提出第一个面试问题
                     2. 一次只问一个问题
                     3. 面试问题应覆盖技术、项目经验和行为方面
@@ -70,9 +71,13 @@ public class InterviewServiceImpl implements InterviewService {
                     }
                     """.formatted(jobDescription, resumeText);
 
+            String fullPrompt = prompt;
+            if (imageData != null && !imageData.isEmpty()) {
+                fullPrompt = "![\u5c97\u4f4d\u62db\u8058\u4fe1\u606f](" + "data:" + imageType + ";base64," + imageData + ")\n\n" + prompt;
+            }
             String aiResponse = chatClient.prompt()
-                    .system("你是一位资深技术面试官，擅长根据简历和岗位信息进行模拟面试。请一次只问一个问题，真实模拟面试场景。")
-                    .user(prompt)
+                    .system("\u4f60\u662f\u4e00\u4f4d\u8d44\u6df1\u6280\u672f\u9762\u8bd5\u5b98\uff0c\u64c5\u957f\u6839\u636e\u7b80\u5386\u548c\u5c97\u4f4d\u4fe1\u606f\u8fdb\u884c\u6a21\u62df\u9762\u8bd5\u3002\u8bf7\u4e00\u6b21\u53ea\u95ee\u4e00\u4e2a\u95ee\u9898\uff0c\u771f\u5b9e\u6a21\u62df\u9762\u8bd5\u573a\u666f\u3002")
+                    .user(fullPrompt)
                     .call()
                     .content();
 
@@ -170,6 +175,7 @@ public class InterviewServiceImpl implements InterviewService {
                     3. 当某个话题已充分考察，切换到新的话题
                     4. 一般覆盖5-8轮对话后可以考虑结束面试，高级岗位可更多
                     5. 确保覆盖技术、项目、行为等多个方面
+                    6. 结束时为每个问题提供“理想回答(modelAnswer)”，帮助候选人了解应该怎么回答，基于他们的简历和岗位要求
 
                     请严格按以下 JSON 格式返回（不要包含其他文字）：
                     {
@@ -180,7 +186,15 @@ public class InterviewServiceImpl implements InterviewService {
                         "summary": "综合评价（仅当action为complete），包括面试总结、技术能力评估、项目经验评估、沟通能力等",
                         "totalScore": 85（仅当action为complete，百分制）,
                         "strengths": ["优势1", "优势2", "优势3"]（仅当action为complete）,
-                        "weaknesses": ["不足1", "不足2"]（仅当action为complete）
+                        "weaknesses": ["不足1", "不足2"]（仅当action为complete）,
+                        "modelAnswers": [
+                            {
+                                "question": "问题文本",
+                                "type": "技术" 或 "项目" 或 "行为",
+                                "isFollowUp": true 或 false,
+                                "modelAnswer": "基于候选人简历和岗位要求的理想回答"
+                            }
+                        ]
                     }
                     """.formatted(jobDescription, resumeText, historyText.toString());
 
@@ -215,12 +229,27 @@ public class InterviewServiceImpl implements InterviewService {
                         ? (List<String>) responseData.get("weaknesses")
                         : new ArrayList<>();
 
+                @SuppressWarnings("unchecked")
+                List<ChatResponse.ModelAnswer> modelAnswers = new ArrayList<>();
+                if (responseData.get("modelAnswers") != null) {
+                    List<Map<String, Object>> rawModels = (List<Map<String, Object>>) responseData.get("modelAnswers");
+                    for (Map<String, Object> m : rawModels) {
+                        ChatResponse.ModelAnswer ma = ChatResponse.ModelAnswer.builder()
+                                .question((String) m.getOrDefault("question", ""))
+                                .type((String) m.getOrDefault("type", ""))
+                                .isFollowUp(Boolean.TRUE.equals(m.get("isFollowUp")))
+                                .modelAnswer((String) m.getOrDefault("modelAnswer", ""))
+                                .build();
+                        modelAnswers.add(ma);
+                    }
+                }
                 return ChatResponse.builder()
                         .isComplete(true)
                         .summary(summary)
                         .totalScore(totalScore)
                         .strengths(strengths)
                         .weaknesses(weaknesses)
+                        .modelAnswers(modelAnswers)
                         .build();
             } else {
                 String question = (String) responseData.getOrDefault("question", "");

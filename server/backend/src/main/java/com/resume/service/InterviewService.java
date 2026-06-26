@@ -6,7 +6,7 @@ import com.resume.dto.StartInterviewRequest;
 
 public interface InterviewService {
 
-    ChatResponse startInterview(Long resumeId, String jobDescription);
+    ChatResponse startInterview(Long resumeId, String jobDescription, String imageData, String imageType);
 
     ChatResponse chat(String sessionId, String userAnswer);
 }

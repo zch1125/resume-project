@@ -19,7 +19,7 @@ public class InterviewController {
 
     @PostMapping("/start")
     public Result<ChatResponse> start(@Valid @RequestBody StartInterviewRequest request) {
-        ChatResponse response = interviewService.startInterview(request.getResumeId(), request.getJobDescription());
+        ChatResponse response = interviewService.startInterview(request.getResumeId(), request.getJobDescription(), request.getImageData(), request.getImageType());
         return Result.success(response);
     }
 
