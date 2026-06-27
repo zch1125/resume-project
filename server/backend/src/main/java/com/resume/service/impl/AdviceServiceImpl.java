@@ -19,8 +19,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.resume.util.AiRetryUtil;
 
 @Slf4j
+/**
+ * 简历修改建议服务实现类。
+ * 支持一次性生成建议与多轮对话优化。
+ */
 @Service
 @RequiredArgsConstructor
 public class AdviceServiceImpl implements AdviceService {
@@ -30,6 +35,10 @@ public class AdviceServiceImpl implements AdviceService {
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 生成初始简历修改建议。
+     * 根据简历内容和目标岗位，调用 AI 进行评估并持久化结果。
+     */
     @Override
     @Transactional
     public AdviceResponse generateAdvice(Long resumeId, String jobTitle) {
@@ -62,11 +71,15 @@ public class AdviceServiceImpl implements AdviceService {
                     注意：如果简历已经很好，将 needModify 设为 false，suggestions 设为空数组。
                     """.formatted(jobTitle, resume.getRawText());
 
-            String aiResponse = chatClient.prompt()
+            String aiResponse = AiRetryUtil.callWithRetry(() ->
+                    chatClient.prompt()
                     .system("你是一位资深简历优化师，擅长分析简历并给出有针对性的修改建议。")
                     .user(prompt)
                     .call()
-                    .content();
+                    .content(),
+
+                    "generateAdvice"
+            );
 
             long elapsed = System.currentTimeMillis() - start;
             log.info("AI advice generated for resumeId={}, cost={}ms", resumeId, elapsed);
@@ -93,6 +106,10 @@ public class AdviceServiceImpl implements AdviceService {
         }
     }
 
+    /**
+     * 对建议进行多轮对话优化。
+     * 根据用户反馈调用 AI 优化建议内容，并更新持久化记录。
+     */
     @Override
     @Transactional
     public AdviceResponse chatAdvice(Long suggestionId, String userMessage) {
@@ -155,11 +172,15 @@ public class AdviceServiceImpl implements AdviceService {
                             historyText.toString(),
                             userMessage);
 
-            String aiResponse = chatClient.prompt()
+            String aiResponse = AiRetryUtil.callWithRetry(() ->
+                    chatClient.prompt()
                     .system("你是一位资深简历优化师，擅长根据用户反馈迭代优化简历建议。")
                     .user(prompt)
                     .call()
-                    .content();
+                    .content(),
+
+                    "chatAdvice"
+            );
 
             long elapsed = System.currentTimeMillis() - start;
             log.info("Advice chat: suggestionId={}, cost={}ms", suggestionId, elapsed);

@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import com.resume.util.AiRetryUtil;
 
 @Slf4j
 @Service
@@ -29,15 +30,16 @@ public class ResumeServiceImpl implements ResumeService {
 
     @Override
     @Transactional
-    public Resume uploadResume(MultipartFile file, String sessionId) {
+    public Resume uploadResume(MultipartFile file, String sessionId, Long userId) {
         try {
             String rawText = tika.parseToString(file.getInputStream());
             Resume resume = new Resume();
             resume.setSessionId(sessionId);
+            resume.setUserId(userId);
             resume.setFileName(file.getOriginalFilename());
             resume.setRawText(rawText);
             resumeMapper.insert(resume);
-            log.info("Resume uploaded: id={}, fileName={}", resume.getId(), resume.getFileName());
+            log.info("Resume uploaded: id={}, fileName={}, userId={}", resume.getId(), resume.getFileName(), userId);
             return resume;
         } catch (Exception e) {
             log.error("Failed to upload resume", e);
@@ -57,7 +59,6 @@ public class ResumeServiceImpl implements ResumeService {
             throw new IllegalArgumentException("简历文本为空，无法解析");
         }
 
-        // 先尝试 AI 解析
         try {
             long start = System.currentTimeMillis();
             String prompt = "你是一位HR专家，请从以下简历文本中提取关键字段，以JSON格式返回（不要包含其他文字）：\n"
@@ -71,11 +72,14 @@ public class ResumeServiceImpl implements ResumeService {
                 + "}\n\n"
                 + "简历文本：\n" + rawText;
 
-            String aiResponse = chatClient.prompt()
+            String aiResponse = AiRetryUtil.callWithRetry(() ->
+                    chatClient.prompt()
                     .system("你是一位专业的HR专家，擅长从简历中提取结构化信息。")
                     .user(prompt)
                     .call()
-                    .content();
+                    .content(),
+                    "parseResume"
+            );
             long elapsed = System.currentTimeMillis() - start;
             log.info("AI parse for resumeId={}, cost={}ms", resumeId, elapsed);
 
@@ -88,7 +92,6 @@ public class ResumeServiceImpl implements ResumeService {
             log.warn("AI parse failed for resumeId={}, using rule-based fallback: {}", resumeId, e.getMessage());
         }
 
-        // 规则解析兜底
         String fallbackJson = ruleBasedParse(rawText);
         resume.setParsedJson(fallbackJson);
         resumeMapper.updateById(resume);
@@ -98,8 +101,8 @@ public class ResumeServiceImpl implements ResumeService {
     private String ruleBasedParse(String text) {
         try {
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("name", extractByPattern(text, "(?:姓[\\s\\u00A0]*名[：:＝\\s]*)([\\u4e00-\\u9fa5]{2,4})"));
-            result.put("expectedPosition", extractByPattern(text, "(?:求职岗位|期望岗位|目标岗位|应聘[：:])\\s*([^\\n]{2,20})"));
+            result.put("name", extractByPattern(text, "(?:姓名[：\\s]*)([\\u4e00-\\u9fa5]{2,4})"));
+            result.put("expectedPosition", extractByPattern(text, "(?:求职岗位|期望岗位|目标岗位|应聘[：])\\s*([^\\n]{2,20})"));
             String edu = extractByPattern(text, "(本科|硕士|博士|专科|大专|研究生)");
             result.put("education", edu.isEmpty() ? "未识别" : edu);
             String years = extractByPattern(text, "(\\d+)\\s*年");

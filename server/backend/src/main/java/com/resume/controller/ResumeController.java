@@ -25,8 +25,9 @@ public class ResumeController {
     @PostMapping("/upload")
     public Result<Map<String, Long>> upload(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("sessionId") String sessionId) {
-        Resume resume = resumeService.uploadResume(file, sessionId);
+            @RequestParam("sessionId") String sessionId,
+            @RequestAttribute Long userId) {
+        Resume resume = resumeService.uploadResume(file, sessionId, userId);
         return Result.success(Map.of("resumeId", resume.getId()));
     }
 

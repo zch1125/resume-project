@@ -5,16 +5,13 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("resume")
-public class Resume {
+@TableName("resume_user")
+public class User {
     @TableId(type = IdType.AUTO)
     private Long id;
-    private String sessionId;
-    private Long userId;
-    private String fileName;
-    private String rawText;
-    private String parsedJson;
-    private String jobTitle;
+    private String username;
+    private String password;
+    private String nickname;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE)

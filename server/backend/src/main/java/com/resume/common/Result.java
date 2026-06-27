@@ -7,10 +7,19 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+/**
+ * 统一响应结果封装。
+ * 所有 API 统一返回此类型，前端拦截器统一解析。
+ *
+ * @param <T> 数据类型
+ */
 public class Result<T> {
 
+    /** 状态码，200 表示成功 */
     private int code;
+    /** 提示信息 */
     private String message;
+    /** 响应数据 */
     private T data;
 
     public static <T> Result<T> success(T data) {

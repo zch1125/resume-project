@@ -13,6 +13,10 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import java.util.stream.Collectors;
 
 @Slf4j
+/**
+ * 全局异常处理器。
+ * 统一拦截并返回错误响应，避免原始堆栈信息泄露到前端。
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

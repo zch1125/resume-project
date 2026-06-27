@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resume.dto.ChatResponse;
+import com.resume.dto.InterviewHistoryItem;
 import com.resume.entity.InterviewSession;
 import com.resume.entity.Resume;
 import com.resume.mapper.InterviewSessionMapper;
@@ -19,8 +20,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDateTime;
+import com.resume.util.AiRetryUtil;
 
 @Slf4j
+/**
+ * 面试服务实现类。
+ * 实现一问一答式对话面试，会话历史持久化到数据库，
+ * AI 根据候选人回答动态决定追问、换题还是结束面试。
+ */
 @Service
 @RequiredArgsConstructor
 public class InterviewServiceImpl implements InterviewService {
@@ -30,6 +38,13 @@ public class InterviewServiceImpl implements InterviewService {
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 启动新的面试会话。
+     * 1. 创建会话并持久化
+     * 2. 构建 prompt（含简历 + 岗位信息 + 可选图片）
+     * 3. 调用 AI 生成第一个问题
+     * 4. 保存对话历史
+     */
     @Override
     @Transactional
     public ChatResponse startInterview(Long resumeId, String jobDescription, String imageData, String imageType) {
@@ -71,15 +86,18 @@ public class InterviewServiceImpl implements InterviewService {
                     }
                     """.formatted(jobDescription, resumeText);
 
-            String fullPrompt = prompt;
-            if (imageData != null && !imageData.isEmpty()) {
-                fullPrompt = "![\u5c97\u4f4d\u62db\u8058\u4fe1\u606f](" + "data:" + imageType + ";base64," + imageData + ")\n\n" + prompt;
-            }
-            String aiResponse = chatClient.prompt()
+            String fullPrompt = imageData != null && !imageData.isEmpty()
+                    ? "![\u5c97\u4f4d\u62db\u8058\u4fe1\u606f](" + "data:" + imageType + ";base64," + imageData + ")\n\n" + prompt
+                    : prompt;
+            String aiResponse = AiRetryUtil.callWithRetry(() ->
+                    chatClient.prompt()
                     .system("\u4f60\u662f\u4e00\u4f4d\u8d44\u6df1\u6280\u672f\u9762\u8bd5\u5b98\uff0c\u64c5\u957f\u6839\u636e\u7b80\u5386\u548c\u5c97\u4f4d\u4fe1\u606f\u8fdb\u884c\u6a21\u62df\u9762\u8bd5\u3002\u8bf7\u4e00\u6b21\u53ea\u95ee\u4e00\u4e2a\u95ee\u9898\uff0c\u771f\u5b9e\u6a21\u62df\u9762\u8bd5\u573a\u666f\u3002")
                     .user(fullPrompt)
                     .call()
-                    .content();
+                    .content(),
+
+                    "startInterview"
+            );
 
             long elapsed = System.currentTimeMillis() - start;
             log.info("Interview start: resumeId={}, sessionId={}, cost={}ms", resumeId, session.getId(), elapsed);
@@ -111,6 +129,15 @@ public class InterviewServiceImpl implements InterviewService {
         }
     }
 
+    /**
+     * 处理用户回答并返回下一步响应。
+     * 1. 获取会话并解析对话历史
+     * 2. 追加用户回答到历史
+     * 3. 构建 prompt 调用 AI 决定下一步动作
+     * 4. 根据 AI 响应执行：
+     *    - continue：追加新问题并返回
+     *    - complete：更新会话状态为完成，返回综合评价和参考答案
+     */
     @Override
     @Transactional
     public ChatResponse chat(String sessionIdStr, String userAnswer) {
@@ -198,11 +225,15 @@ public class InterviewServiceImpl implements InterviewService {
                     }
                     """.formatted(jobDescription, resumeText, historyText.toString());
 
-            String aiResponse = chatClient.prompt()
+            String aiResponse = AiRetryUtil.callWithRetry(() ->
+                    chatClient.prompt()
                     .system("你是一位资深技术面试官，擅长根据候选人的回答动态调整面试策略，进行真实模拟面试。")
                     .user(prompt)
                     .call()
-                    .content();
+                    .content(),
+
+                    "chat"
+            );
 
             long elapsed = System.currentTimeMillis() - start;
             log.info("Interview chat: sessionId={}, cost={}ms", sessionId, elapsed);
@@ -219,6 +250,8 @@ public class InterviewServiceImpl implements InterviewService {
                 Integer totalScore = responseData.get("totalScore") != null
                         ? Integer.parseInt(responseData.get("totalScore").toString())
                         : 0;
+                session.setTotalScore(totalScore);
+                session.setSummary(summary);
 
                 @SuppressWarnings("unchecked")
                 List<String> strengths = responseData.get("strengths") != null
@@ -278,6 +311,43 @@ public class InterviewServiceImpl implements InterviewService {
             log.error("Failed to process chat for sessionId={}", sessionId, e);
             throw new RuntimeException("面试处理失败：" + e.getMessage());
         }
+    }
+
+
+    @Override
+    public List<InterviewHistoryItem> getInterviewHistory(String frontendSessionId) {
+        List<Map<String, Object>> rows = sessionMapper.selectBySessionId(frontendSessionId);
+        List<InterviewHistoryItem> items = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            int questionCount = 0;
+            String historyJson = (String) row.get("conversation_history");
+            if (historyJson != null) {
+                try {
+                    List<Map<String, Object>> history = objectMapper.readValue(historyJson,
+                            new TypeReference<List<Map<String, Object>>>() {});
+                    for (Map<String, Object> turn : history) {
+                        if ("ai".equals(turn.get("role")) && turn.containsKey("question")) {
+                            questionCount++;
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to parse conversation history for session {}", row.get("id"));
+                }
+            }
+            items.add(InterviewHistoryItem.builder()
+                    .id(row.get("id") != null ? Long.valueOf(row.get("id").toString()) : null)
+                    .resumeId(row.get("resume_id") != null ? Long.valueOf(row.get("resume_id").toString()) : null)
+                    .jobDescription((String) row.get("job_description"))
+                    .status((String) row.get("status"))
+                    .totalScore(row.get("total_score") != null ? Integer.valueOf(row.get("total_score").toString()) : null)
+                    .summary((String) row.get("summary"))
+                    .questionCount(questionCount)
+                    .createTime(row.get("create_time") != null
+                            ? LocalDateTime.parse(row.get("create_time").toString().replace(" ", "T").substring(0, 19))
+                            : null)
+                    .build());
+        }
+        return items;
     }
 
     private Map<String, Object> parseJsonResponse(String aiResponse) {
